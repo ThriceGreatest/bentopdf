@@ -1000,16 +1000,8 @@ function showProperties(field: FormField): void {
             return true
         }
 
-        const isDuplicateInFields = fields.some(f => f.id !== field.id && f.name === newName)
-        const isDuplicateInPdf = existingFieldNames.has(newName)
-
-        if (isDuplicateInFields || isDuplicateInPdf) {
-            nameError.textContent = `Field name "${newName}" already exists in this ${isDuplicateInPdf ? 'PDF' : 'form'}. Please try using a unique name.`
-            nameError.classList.remove('hidden')
-            propName.classList.add('border-red-500')
-            return false
-        }
-
+        // Allow duplicate field names - PDF forms support multiple fields with the same name
+        // that share the same value when filled
         nameError.classList.add('hidden')
         propName.classList.remove('border-red-500')
         return true
@@ -1436,48 +1428,9 @@ downloadBtn.addEventListener('click', async () => {
     const duplicates: string[] = []
     const conflictsWithPdf: string[] = []
 
-    fields.forEach(field => {
-        const count = nameCount.get(field.name) || 0
-        nameCount.set(field.name, count + 1)
-
-        if (existingFieldNames.has(field.name)) {
-            if (field.type === 'radio' && existingRadioGroups.has(field.name)) {
-            } else {
-                conflictsWithPdf.push(field.name)
-            }
-        }
-    })
-
-    nameCount.forEach((count, name) => {
-        if (count > 1) {
-            const fieldsWithName = fields.filter(f => f.name === name)
-            const allRadio = fieldsWithName.every(f => f.type === 'radio')
-
-            if (!allRadio) {
-                duplicates.push(name)
-            }
-        }
-    })
-
-    if (conflictsWithPdf.length > 0) {
-        const conflictList = [...new Set(conflictsWithPdf)].map(name => `"${name}"`).join(', ')
-        showModal(
-            'Field Name Conflict',
-            `The following field names already exist in the uploaded PDF: ${conflictList}. Please rename these fields before downloading.`,
-            'error'
-        )
-        return
-    }
-
-    if (duplicates.length > 0) {
-        const duplicateList = duplicates.map(name => `"${name}"`).join(', ')
-        showModal(
-            'Duplicate Field Names',
-            `The following field names are used more than once: ${duplicateList}. Please rename these fields to use unique names before downloading.`,
-            'error'
-        )
-        return
-    }
+    // Allow duplicate field names - PDF forms support multiple fields with the same name
+    // that share the same value when filled (this is intentional behavior)
+    // This includes fields that match names in the uploaded PDF
 
     if (fields.length === 0) {
         alert('Please add at least one field before downloading.')
@@ -1512,6 +1465,7 @@ downloadBtn.addEventListener('click', async () => {
         pdfDoc.setLanguage('en-US')
 
         const radioGroups = new Map<string, any>() // Track created radio groups
+        const createdFields = new Map<string, any>() // Track created fields to support duplicate names
 
         for (const field of fields) {
             const pageData = pages[field.pageIndex]
@@ -1539,7 +1493,17 @@ downloadBtn.addEventListener('click', async () => {
             })
 
             if (field.type === 'text') {
-                const textField = form.createTextField(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let textField = createdFields.get(field.name)
+                if (!textField) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        textField = existingField
+                    } else {
+                        textField = form.createTextField(field.name)
+                    }
+                    createdFields.set(field.name, textField)
+                }
                 const rgbColor = hexToRgb(field.textColor)
                 const borderRgb = hexToRgb(field.borderColor || '#000000')
 
@@ -1591,7 +1555,17 @@ downloadBtn.addEventListener('click', async () => {
                 }
 
             } else if (field.type === 'checkbox') {
-                const checkBox = form.createCheckBox(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let checkBox = createdFields.get(field.name)
+                if (!checkBox) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        checkBox = existingField
+                    } else {
+                        checkBox = form.createCheckBox(field.name)
+                    }
+                    createdFields.set(field.name, checkBox)
+                }
                 const borderRgb = hexToRgb(field.borderColor || '#000000')
                 checkBox.addToPage(pdfPage, {
                     x: x,
@@ -1651,7 +1625,17 @@ downloadBtn.addEventListener('click', async () => {
                 }
 
             } else if (field.type === 'dropdown') {
-                const dropdown = form.createDropdown(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let dropdown = createdFields.get(field.name)
+                if (!dropdown) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        dropdown = existingField
+                    } else {
+                        dropdown = form.createDropdown(field.name)
+                    }
+                    createdFields.set(field.name, dropdown)
+                }
                 const borderRgb = hexToRgb(field.borderColor || '#000000')
                 dropdown.addToPage(pdfPage, {
                     x: x,
@@ -1681,7 +1665,17 @@ downloadBtn.addEventListener('click', async () => {
                 }
 
             } else if (field.type === 'optionlist') {
-                const optionList = form.createOptionList(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let optionList = createdFields.get(field.name)
+                if (!optionList) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        optionList = existingField
+                    } else {
+                        optionList = form.createOptionList(field.name)
+                    }
+                    createdFields.set(field.name, optionList)
+                }
                 const borderRgb = hexToRgb(field.borderColor || '#000000')
                 optionList.addToPage(pdfPage, {
                     x: x,
@@ -1711,7 +1705,17 @@ downloadBtn.addEventListener('click', async () => {
                 }
 
             } else if (field.type === 'button') {
-                const button = form.createButton(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let button = createdFields.get(field.name)
+                if (!button) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        button = existingField
+                    } else {
+                        button = form.createButton(field.name)
+                    }
+                    createdFields.set(field.name, button)
+                }
                 const borderRgb = hexToRgb(field.borderColor || '#000000')
                 button.addToPage(field.label || 'Button', pdfPage, {
                     x: x,
@@ -1799,7 +1803,17 @@ downloadBtn.addEventListener('click', async () => {
                     })
                 }
             } else if (field.type === 'date') {
-                const dateField = form.createTextField(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let dateField = createdFields.get(field.name)
+                if (!dateField) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        dateField = existingField
+                    } else {
+                        dateField = form.createTextField(field.name)
+                    }
+                    createdFields.set(field.name, dateField)
+                }
                 dateField.addToPage(pdfPage, {
                     x: x,
                     y: y,
@@ -1840,7 +1854,17 @@ downloadBtn.addEventListener('click', async () => {
                     })
                 }
             } else if (field.type === 'image') {
-                const imageBtn = form.createButton(field.name)
+                // Check if field already exists (to support duplicate field names)
+                let imageBtn = createdFields.get(field.name)
+                if (!imageBtn) {
+                    const existingField = form.getFieldMaybe(field.name)
+                    if (existingField) {
+                        imageBtn = existingField
+                    } else {
+                        imageBtn = form.createButton(field.name)
+                    }
+                    createdFields.set(field.name, imageBtn)
+                }
                 imageBtn.addToPage(field.label || 'Click to Upload Image', pdfPage, {
                     x: x,
                     y: y,
@@ -1940,21 +1964,7 @@ downloadBtn.addEventListener('click', async () => {
     } catch (error) {
         console.error('Error generating PDF:', error)
         const errorMessage = (error as Error).message
-
-        // Check if it's a duplicate field name error
-        if (errorMessage.includes('A field already exists with the specified name')) {
-            // Extract the field name from the error message
-            const match = errorMessage.match(/A field already exists with the specified name: "(.+?)"/)
-            const fieldName = match ? match[1] : 'unknown'
-
-            if (existingRadioGroups.has(fieldName)) {
-                console.log(`Adding to existing radio group: ${fieldName}`)
-            } else {
-                showModal('Duplicate Field Name', `A field named "${fieldName}" already exists. Please rename this field to use a unique name before downloading.`, 'error')
-            }
-        } else {
-            showModal('Error', 'Error generating PDF: ' + errorMessage, 'error')
-        }
+        showModal('Error', 'Error generating PDF: ' + errorMessage, 'error')
     }
 })
 
